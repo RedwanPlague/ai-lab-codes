@@ -1,12 +1,15 @@
 <template>
   <div>
     <label>rows:
-      <input v-model="rowString" name="rows" type="number" @input="handleRowChange" :min="rowMin" :max="rowMax"/>
+      <input v-model="rows.string" name="rows" type="number" @input="handleInputChange(rows)" :min="rows.min" :max="rows.max"/>
     </label>
     <label>cols:
-      <input v-model="colString" name="cols" type="number" @input="handleColChange" :min="colMin" :max="colMax"/>
+      <input v-model="cols.string" name="cols" type="number" @input="handleInputChange(cols)" :min="cols.min" :max="cols.max"/>
     </label>
-    <Board :rows="rows" :cols="cols"/>
+    <label>ghosts:
+      <input v-model="ghosts.string" name="ghosts" type="number" @input="handleInputChange(ghosts)" :min="ghosts.min" :max="ghosts.max"/>
+    </label>
+    <Board :rows="rows.value" :cols="cols.value" :ghosts="ghosts.value"/>
   </div>
 </template>
 
@@ -20,35 +23,37 @@ export default {
   },
   data () {
     return {
-      rowString: '9',
-      colString: '9',
-      rows: 9,
-      cols: 9,
-      rowMin: 1,
-      colMin: 1,
-      rowMax: 10,
-      colMax: 20
+      rows: {
+        string: '9',
+        value: 9,
+        min: 1,
+        max: 10
+      },
+      cols: {
+        string: '9',
+        value: 9,
+        min: 1,
+        max: 20
+      },
+      ghosts: {
+        string: '1',
+        value: 1,
+        min: 1,
+        max: 10
+      }
     }
   },
   methods: {
-    handleRowChange () {
-      if (this.rowString === '') {
-        this.rows = this.rowMin
+    handleInputChange (input) {
+      if (input.string === '') {
+        this.$set(input, 'value', input.min)
       }
       else {
-        this.rows = Math.max(this.rowMin, Math.min(this.rowMax, parseInt(this.rowString)))
-        this.rowString = this.rows.toString();
+        const value = Math.max(input.min, Math.min(input.max, parseInt(input.string)))
+        this.$set(input, 'value', value)
+        this.$set(input, 'string', value.toString())
       }
     },
-    handleColChange () {
-      if (this.colString === '') {
-        this.cols = this.colMin
-      }
-      else {
-        this.cols = Math.max(this.colMin, Math.min(this.colMax, parseInt(this.colString)))
-        this.colString = this.cols.toString();
-      }
-    }
   }
 }
 </script>

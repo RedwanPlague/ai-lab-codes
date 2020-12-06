@@ -9,7 +9,13 @@
     <label>ghosts:
       <input v-model="ghosts.string" name="ghosts" type="number" @input="handleInputChange(ghosts)" :min="ghosts.min" :max="ghosts.max"/>
     </label>
-    <Board :rows="rows.value" :cols="cols.value" :ghosts="ghosts.value"/>
+    <label>near:
+      <input v-model="near.string" name="near" type="number" @input="handleInputChange(near)" :min="near.min" :max="near.max"/>
+    </label>
+    <label>far:
+      <input v-model="far.string" name="far" type="number" @input="handleInputChange(far)" :min="far.min" :max="far.max"/>
+    </label>
+    <Board :rows="rows.value" :cols="cols.value" :ghosts="ghosts.value" :splits="[near.value, near.value + far.value]"/>
   </div>
 </template>
 
@@ -40,7 +46,19 @@ export default {
         value: 1,
         min: 1,
         max: 10
-      }
+      },
+      near: {
+        string: '2',
+        value: 2,
+        min: 0,
+        max: 3
+      },
+      far: {
+        string: '3',
+        value: 3,
+        min: 0,
+        max: 5
+      },
     }
   },
   methods: {

@@ -3,14 +3,44 @@
     <table class="center">
       <tr v-for="(row, x) in probabilities" :key="x">
         <td v-for="(probability, y) in row" :key="y"
-            @click="senseCell({x, y})"
+          :style="cellStyles(x, y, probability)"
+          @click="senseCell(x, y)"
         >
-          {{(100*probability).toFixed(1)}}
+          <span v-if="tryResult > 0 && x === lastSensed.x && y === lastSensed.y">
+            <span v-if="tryResult === 1" style="color: green; font-size: 30px">
+              &#x2714;
+            </span>
+            <span v-else-if="tryResult === 2" style="color: red; font-size: 30px">
+              &#x2717;
+            </span>
+          </span>
+          <span v-else>
+<!--            {{closestGhostDistanceFromCell(x, y)}}-->
+            {{(100*probability).toFixed(2)}}
+<!--            {{ghostCountOfCell(x, y)}}-->
+          </span>
         </td>
       </tr>
     </table>
-    <button @click="advanceTime">Advance Time</button>
-    <button @click="catchGhost">Catch Ghost</button>
+    <div id="caught">
+      <span v-if="tryResult === 1" style="color: green">
+        Caught {{caughtCount}} Ghost{{caughtCount > 1 ? 's' : ''}}
+      </span>
+      <span v-else-if="tryResult === 2" style="color: red">
+        No Ghost There
+      </span>
+      <span v-else>
+        Caught Ghosts: {{ghosts - ghostPositions.length}}
+      </span>
+    </div>
+    <div id="done" v-if="ghostPositions.length === 0">
+      All ghosts caught, you can sleep at peace now. Yay!
+    </div>
+    <div class="center" style="width: fit-content;">
+      <button @click="advanceTime" v-if="ghostPositions.length > 0">Advance Time</button>
+      <button @click="reveal" v-if="ghostPositions.length > 0">{{revealed ? 'Hide' : 'Reveal'}}</button>
+      <button @click="catchMode" v-if="ghostPositions.length > 0">{{catching ? 'Find' : 'Catch'}}</button>
+    </div>
   </div>
 </template>
 
@@ -29,21 +59,69 @@ export default {
     ghosts: {
       type: Number,
       default: 1
+    },
+    splits: {
+      type: Array,
+      default () {
+        return [2, 7]
+      }
     }
   },
   data () {
     return {
+      bgColors: ['red', 'orange', 'green'],
+      fontColors: ['white', 'black', 'white'],
+      // side, diagonal, stay
+      cornerProbabilities: [0.48, 0.018, 0.004],
+      sideProbabilities: [0.32, 0.012, 0.004],
+      midProbabilities: [0.24, 0.009, 0.004],
       probabilities: [[]],
       ghostPositions: [],
+      tryResult: 0,
+      caughtCount: 0,
+      lastSensed: {x: -1, y: -1},
+      currentlySensed: [],
+      revealed: false,
+      catching: false
     }
   },
   methods: {
     initialize () {
-      this.probabilities = Array(this.rows).fill(1/this.rows/this.cols).map(x => Array(this.cols).fill(x))
+      const N = this.rows * this.cols
+      // const value = 1 - Math.pow(1 - 1 / N, this.ghosts)
+      const value = this.ghosts / N
+      this.probabilities = Array(this.rows).fill(value).map(x => Array(this.cols).fill(x))
       this.ghostPositions = Array(this.ghosts)
       for (let i = 0; i < this.ghosts; i++) {
         this.ghostPositions[i] = this.getRandomCell()
       }
+      this.tryResult = 0
+      this.lastSensed = {x: -1, y: -1}
+      this.currentlySensed = []
+      // this.revealed = false
+      this.catching = false
+    },
+    cellStyles (x, y, probability) {
+      if (this.tryResult > 0 && x === this.lastSensed.x && y === this.lastSensed.y) {
+        return {
+          backgroundColor: 'white'
+        }
+      }
+      else if (this.isCurrentlySensed(x, y) || this.revealed) {
+        return {
+          backgroundColor: this.bgColors[this.getDistClass(this.closestGhostDistanceFromCell(x, y))],
+          color: this.fontColors[this.getDistClass(this.closestGhostDistanceFromCell(x, y))]
+        }
+      }
+      else {
+        return {
+          backgroundColor: `rgba(0, 0, 255, ${Math.sqrt(probability)})`,
+          color: Math.sqrt(probability) > .5 ? 'white' : 'black'
+        }
+      }
+    },
+    withinBoard (x, y) {
+      return (x >= 0 && x < this.rows && y >= 0 && y < this.cols)
     },
     getRandomCell () {
       return {
@@ -51,24 +129,31 @@ export default {
         y: Math.floor(Math.random() * this.cols)
       }
     },
-    ghostCountOfCell (x, y) {
-      return this.ghostPositions.reduce((count, {ix, iy}) => (ix === x && iy === y) ? ++count : count, 0)
+    getDistClass (dist) {
+      for (let i = 0; i < this.splits.length; i++) {
+        if (dist <= this.splits[i]) return i;
+      }
+      return this.splits.length
     },
-    closestGhostDistanceFromCell (x, y) {
+    getDistClassCount (x, y, distClass) {
+      let count = 0
+      for (let i = 0; i < this.rows; i++) {
+        for (let j = 0; j < this.cols; j++) {
+          if (this.getDistClass(Math.abs(x - i) + Math.abs(y - j)) === distClass) count++
+        }
+      }
+      return count
+    },
+    ghostCountOfCell (x, y) {
+      return this.ghostPositions.reduce((count, cell) => (x === cell.x && y === cell.y) ? ++count : count, 0)
+    },
+    closestGhostDistanceFromCell (px, py) {
       return this.ghostPositions.reduce(
-          (minDist, {ix, iy}) => Math.min(minDist, Math.abs(x - ix) + Math.abs(y - iy)),
+          (minDist, {x, y}) => {
+            return Math.min(minDist, Math.abs(x - px) + Math.abs(y - py))
+          },
           (this.rows + this.cols)
       )
-    },
-    updateCell (cell, value) {
-      this.probabilities[cell.x][cell.y] = value
-      this.$set(this.probabilities, cell.x, this.probabilities[cell.x])
-    },
-    senseCell (cell) {
-      this.updateCell(cell, 0)
-    },
-    getCurrentProbability (x, y) {
-      return (x >= 0 && x < this.rows && y >= 0 && y < this.cols) ? this.probabilities[x][y] : 0
     },
     isCornerCell (x, y) {
       return (x === 0 || x === this.rows-1) && (y === 0 || y === this.cols-1)
@@ -79,32 +164,189 @@ export default {
     isSideCell (x, y) {
       return !this.isCornerCell(x, y) && !this.isMidCell(x, y)
     },
-    getAdvancedProbability (x, y) {
+    getMoveProbabilities (x, y) {
       if (this.isCornerCell(x, y)) {
-        console.log("haha")
+        return this.cornerProbabilities
       }
       else if (this.isSideCell(x, y)) {
-        console.log("haha")
+        return this.sideProbabilities
+      }
+      return this.midProbabilities
+    },
+    updateArray (tempArray, x, y, value) {
+      if (this.withinBoard(x, y)) {
+        tempArray[x][y] += value
+      }
+    },
+    spreadSelf (tempArray, x, y, value, moveProbabilities) {
+      this.updateArray(tempArray, x+1, y, value * moveProbabilities[0])
+      this.updateArray(tempArray, x-1, y, value * moveProbabilities[0])
+      this.updateArray(tempArray, x, y+1, value * moveProbabilities[0])
+      this.updateArray(tempArray, x, y-1, value * moveProbabilities[0])
+      this.updateArray(tempArray, x+1, y+1, value * moveProbabilities[1])
+      this.updateArray(tempArray, x+1, y-1, value * moveProbabilities[1])
+      this.updateArray(tempArray, x-1, y+1, value * moveProbabilities[1])
+      this.updateArray(tempArray, x-1, y-1, value * moveProbabilities[1])
+      this.updateArray(tempArray, x, y, value * moveProbabilities[2])
+    },
+    advanceProbabilities () {
+      const tempProbabilities = Array(this.rows).fill(0).map(x => Array(this.cols).fill(x))
+      for (let i = 0; i < this.rows; i++) {
+        for (let j = 0; j < this.cols; j++) {
+          this.spreadSelf(tempProbabilities, i,  j, this.probabilities[i][j], this.getMoveProbabilities(i, j))
+        }
+      }
+      this.probabilities = tempProbabilities
+    },
+    goRandomDirection ({x, y}) {
+      const moveProbabilities = this.getMoveProbabilities(x, y)
+      const random = Math.random()
+      let current = 0
+      if (this.withinBoard(x+1, y)) {
+        current += moveProbabilities[0]
+        if (random < current) return {x:x+1, y:y}
+      }
+      if (this.withinBoard(x-1, y)) {
+        current += moveProbabilities[0]
+        if (random < current) return {x:x-1, y:y}
+      }
+      if (this.withinBoard(x, y+1)) {
+        current += moveProbabilities[0]
+        if (random < current) return {x:x, y:y+1}
+      }
+      if (this.withinBoard(x, y-1)) {
+        current += moveProbabilities[0]
+        if (random < current) return {x:x, y:y-1}
+      }
+      if (this.withinBoard(x+1, y+1)) {
+        current += moveProbabilities[1]
+        if (random < current) return {x:x+1, y:y+1}
+      }
+      if (this.withinBoard(x+1, y-1)) {
+        current += moveProbabilities[1]
+        if (random < current) return {x:x+1, y:y-1}
+      }
+      if (this.withinBoard(x-1, y+1)) {
+        current += moveProbabilities[1]
+        if (random < current) return {x:x-1, y:y+1}
+      }
+      if (this.withinBoard(x-1, y-1)) {
+        current += moveProbabilities[1]
+        if (random < current) return {x:x-1, y:y-1}
+      }
+      return {x, y}
+    },
+    advanceGhosts () {
+      for (let i = 0; i < this.ghostPositions.length; i++) {
+        this.$set(this.ghostPositions, i, this.goRandomDirection(this.ghostPositions[i]))
       }
     },
     advanceTime () {
-      for (let i = 0; i < this.rows; i++) {
-        for (let j = 0; j < this.cols; j++) {
-          this.getAdvancedProbability(i, j)
+      this.currentlySensed = []
+      this.advanceProbabilities()
+      this.advanceGhosts()
+    },
+    tryToCatch (x, y) {
+      this.caughtCount = this.ghostCountOfCell(x, y)
+      if (this.caughtCount > 0) {
+        this.currentlySensed = []
+        this.ghostPositions = this.ghostPositions.filter(cell => x !== cell.x || y !== cell.y)
+        if (this.ghostPositions.length === 0) {
+          this.probabilities = Array(this.rows).fill(0).map(x => Array(this.cols).fill(x))
         }
+        this.tryResult = 1
+        setTimeout(() => {
+          this.tryResult = 0
+        }, 1000)
+      }
+      else {
+        this.tryResult = 2
+        setTimeout(() => {
+          this.tryResult = 0
+        }, 500)
       }
     },
-    catchGhost () {
+    senseCell (x, y) {
+      if (this.tryResult > 0 || this.ghostPositions.length === 0) return;
 
+      this.lastSensed = {x, y}
+      if (this.catching) {
+        this.tryToCatch(x, y)
+      }
+      else if (!this.isCurrentlySensed(x, y)) {
+        this.currentlySensed.push({x, y})
+        const sensedClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
+
+        // number of cells that have distClass < sensedClass
+        let A = 0
+        for (let i = 0; i < sensedClass; i++) {
+          A += this.getDistClassCount(x, y, i)
+        }
+        // number of cells that have distClass === sensedClass
+        const B = this.getDistClassCount(x, y, sensedClass)
+
+        const N = this.rows * this.cols
+        const useN = Math.pow(N, this.ghostPositions.length)
+        const useN1 = Math.pow(N - 1, this.ghostPositions.length)
+        const useNA = Math.pow(N - A, this.ghostPositions.length)
+        const useNA1 = Math.pow(N - A - 1, this.ghostPositions.length)
+        const useNAB = Math.pow(N - A - B, this.ghostPositions.length)
+        const useNAB1 = Math.pow(N - A - B - 1, this.ghostPositions.length)
+        const weightForEqual = (useNA - useNA1) / (useN - useN1)
+        const weightForLarger = (useNA - useNA1 - useNAB + useNAB1) / (useN - useN1)
+
+        const tempArray = JSON.parse(JSON.stringify(this.probabilities))
+        let sum = 0
+        for (let i = 0; i < this.rows; i++) {
+          for (let j = 0; j < this.cols; j++) {
+            const curClass = this.getDistClass(Math.abs(x - i) + Math.abs(y - j))
+            if (curClass < sensedClass) {
+              tempArray[i][j] = 0
+            }
+            else if (curClass === sensedClass) {
+              tempArray[i][j] *= weightForEqual
+            }
+            else {
+              tempArray[i][j] *= weightForLarger
+            }
+            sum += tempArray[i][j]
+          }
+        }
+        sum /= this.ghostPositions.length
+        for (let i = 0; i < this.rows; i++) {
+          for (let j = 0; j < this.cols; j++) {
+            tempArray[i][j] /= sum
+          }
+        }
+        this.probabilities = tempArray
+      }
+    },
+    isCurrentlySensed (x, y) {
+      for (let cell of this.currentlySensed) {
+        if (x === cell.x && y === cell.y) return true
+      }
+      return false
+    },
+    reveal () {
+      this.revealed = !this.revealed
+    },
+    catchMode () {
+      this.currentlySensed = []
+      this.catching = !this.catching
     }
   },
   watch: {
-    $props: {
-      handler () {
-        this.initialize()
-      },
-      deep: true,
-      immediate: true
+    rows () {
+      this.initialize()
+    },
+    cols () {
+      this.initialize()
+    },
+    ghosts () {
+      this.initialize()
+    },
+    splits () {
+      this.currentlySensed = []
     }
   },
   created () {
@@ -127,5 +369,28 @@ table td {
   height: 50px;
   border: 1px solid black;
   cursor: pointer;
+}
+#caught {
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+#done {
+  margin-bottom: 20px;
+  font-size: 20px;
+  color: limegreen;
+  font-weight: bold;
+}
+button {
+  border-radius: 5px;
+  margin-left: 10px;
+  margin-right: 10px;
+  font-size: 16px;
+  width: 100px;
+  height: 50px;
+  cursor: pointer;
+  float: left;
+}
+button:hover {
+  background-color: lightgrey;
 }
 </style>

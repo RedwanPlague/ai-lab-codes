@@ -7,8 +7,8 @@
           @click="senseCell(x, y)"
         >
           <span v-if="tryResult > 0 && x === lastSensed.x && y === lastSensed.y">
-            <span v-if="tryResult === 1" style="color: green; font-size: 30px">
-              &#x2714;
+            <span v-if="tryResult === 1" :style="{color: 'green', fontSize: (allAtOnce ? 25 : 30) + 'px'}">
+              &#x2714;<span v-if="allAtOnce">{{caughtCount}}</span>
             </span>
             <span v-else-if="tryResult === 2" style="color: red; font-size: 30px">
               &#x2717;
@@ -23,18 +23,18 @@
       </tr>
     </table>
     <div id="caught">
-      <span v-if="tryResult === 1" style="color: green">
-        Caught {{caughtCount}} Ghost{{caughtCount > 1 ? 's' : ''}}
-      </span>
-      <span v-else-if="tryResult === 2" style="color: red">
-        No Ghost There
-      </span>
-      <span v-else>
+<!--      <span v-if="tryResult === 1" style="color: green">-->
+<!--        Caught {{caughtCount}} Ghost{{caughtCount > 1 ? 's' : ''}}-->
+<!--      </span>-->
+<!--      <span v-else-if="tryResult === 2" style="color: red">-->
+<!--        No Ghost There-->
+<!--      </span>-->
+<!--      <span v-else>-->
         Caught Ghosts: {{ghosts - ghostPositions.length}}
-      </span>
+<!--      </span>-->
     </div>
     <div id="done" v-if="ghostPositions.length === 0">
-      All ghosts caught, you can sleep at peace now. Yay!
+      {{ghosts === 1 ? 'Ghost' : 'All ghosts'}} caught, you can sleep at peace now. Yay!
     </div>
     <div class="center" style="width: fit-content;">
       <button @click="advanceTime" v-if="ghostPositions.length > 0">Advance Time</button>
@@ -78,6 +78,7 @@ export default {
       probabilities: [[]],
       ghostPositions: [],
       tryResult: 0,
+      allAtOnce: false,
       caughtCount: 0,
       lastSensed: {x: -1, y: -1},
       currentlySensed: [],
@@ -108,15 +109,17 @@ export default {
         }
       }
       else if (this.isCurrentlySensed(x, y) || this.revealed) {
+        const distClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
         return {
-          backgroundColor: this.bgColors[this.getDistClass(this.closestGhostDistanceFromCell(x, y))],
-          color: this.fontColors[this.getDistClass(this.closestGhostDistanceFromCell(x, y))]
+          backgroundColor: this.bgColors[distClass],
+          color: this.fontColors[distClass]
         }
       }
       else {
+        const depth = (this.ghostPositions.length === 0 ? 0 : Math.sqrt(probability/this.ghostPositions.length))
         return {
-          backgroundColor: `rgba(0, 0, 255, ${Math.sqrt(probability)})`,
-          color: Math.sqrt(probability) > .5 ? 'white' : 'black'
+          backgroundColor: `rgba(0, 0, 255, ${depth})`,
+          color: depth > .5 ? 'white' : 'black'
         }
       }
     },
@@ -246,11 +249,35 @@ export default {
       this.advanceProbabilities()
       this.advanceGhosts()
     },
+    updateCell (x, y, value) {
+      this.probabilities[x][y] = value
+      this.$set(this.probabilities, x, this.probabilities[x])
+    },
     tryToCatch (x, y) {
       this.caughtCount = this.ghostCountOfCell(x, y)
       if (this.caughtCount > 0) {
+        if (this.allAtOnce) {
+          this.caughtCount = 1
+        }
+
         this.currentlySensed = []
-        this.ghostPositions = this.ghostPositions.filter(cell => x !== cell.x || y !== cell.y)
+
+        if (this.allAtOnce) {
+          // if all ghosts in this cell are caught at once
+          this.ghostPositions = this.ghostPositions.filter(cell => x !== cell.x || y !== cell.y)
+          this.updateCell(x, y, 0)
+        }
+        else {
+          // if only one of the ghosts in this cell are caught at once
+          for (let i = 0; i < this.ghostPositions.length; i++) {
+            if (this.ghostPositions[i].x === x && this.ghostPositions[i].y === y) {
+              this.ghostPositions.splice(i, 1)
+              break;
+            }
+          }
+        }
+        this.normalize()
+
         if (this.ghostPositions.length === 0) {
           this.probabilities = Array(this.rows).fill(0).map(x => Array(this.cols).fill(x))
         }
@@ -260,65 +287,76 @@ export default {
         }, 1000)
       }
       else {
+        this.updateCell(x, y, 0)
+        this.normalize()
         this.tryResult = 2
         setTimeout(() => {
           this.tryResult = 0
         }, 500)
       }
     },
+    reWeight (x, y) {
+      const sensedClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
+
+      // number of cells that have distClass < sensedClass
+      let A = 0
+      for (let i = 0; i < sensedClass; i++) {
+        A += this.getDistClassCount(x, y, i)
+      }
+      // number of cells that have distClass === sensedClass
+      const B = this.getDistClassCount(x, y, sensedClass)
+
+      const N = this.rows * this.cols
+      const useN = Math.pow(N, this.ghostPositions.length)
+      const useN1 = Math.pow(N - 1, this.ghostPositions.length)
+      const useNA = Math.pow(N - A, this.ghostPositions.length)
+      const useNA1 = Math.pow(N - A - 1, this.ghostPositions.length)
+      const useNAB = Math.pow(N - A - B, this.ghostPositions.length)
+      const useNAB1 = Math.pow(N - A - B - 1, this.ghostPositions.length)
+      const weightForEqual = (useNA - useNA1) / (useN - useN1)
+      const weightForLarger = (useNA - useNA1 - useNAB + useNAB1) / (useN - useN1)
+
+      const tempArray = JSON.parse(JSON.stringify(this.probabilities))
+      for (let i = 0; i < this.rows; i++) {
+        for (let j = 0; j < this.cols; j++) {
+          const curClass = this.getDistClass(Math.abs(x - i) + Math.abs(y - j))
+          if (curClass < sensedClass) {
+            tempArray[i][j] = 0
+          }
+          else if (curClass === sensedClass) {
+            tempArray[i][j] *= weightForEqual
+          }
+          else {
+            tempArray[i][j] *= weightForLarger
+          }
+        }
+      }
+      this.probabilities = tempArray
+    },
+    normalize () {
+      let sum = this.probabilities.reduce((tempSum, rowArray) => tempSum + rowArray.reduce((tempRowSum, cell) => tempRowSum + cell, 0), 0)
+      // console.log(sum)
+      sum /= this.ghostPositions.length
+      const tempArray = JSON.parse(JSON.stringify(this.probabilities))
+      for (let i = 0; i < this.rows; i++) {
+        for (let j = 0; j < this.cols; j++) {
+          tempArray[i][j] /= sum
+        }
+      }
+      this.probabilities = tempArray
+    },
     senseCell (x, y) {
       if (this.tryResult > 0 || this.ghostPositions.length === 0) return;
 
       this.lastSensed = {x, y}
+
       if (this.catching) {
         this.tryToCatch(x, y)
       }
       else if (!this.isCurrentlySensed(x, y)) {
         this.currentlySensed.push({x, y})
-        const sensedClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
-
-        // number of cells that have distClass < sensedClass
-        let A = 0
-        for (let i = 0; i < sensedClass; i++) {
-          A += this.getDistClassCount(x, y, i)
-        }
-        // number of cells that have distClass === sensedClass
-        const B = this.getDistClassCount(x, y, sensedClass)
-
-        const N = this.rows * this.cols
-        const useN = Math.pow(N, this.ghostPositions.length)
-        const useN1 = Math.pow(N - 1, this.ghostPositions.length)
-        const useNA = Math.pow(N - A, this.ghostPositions.length)
-        const useNA1 = Math.pow(N - A - 1, this.ghostPositions.length)
-        const useNAB = Math.pow(N - A - B, this.ghostPositions.length)
-        const useNAB1 = Math.pow(N - A - B - 1, this.ghostPositions.length)
-        const weightForEqual = (useNA - useNA1) / (useN - useN1)
-        const weightForLarger = (useNA - useNA1 - useNAB + useNAB1) / (useN - useN1)
-
-        const tempArray = JSON.parse(JSON.stringify(this.probabilities))
-        let sum = 0
-        for (let i = 0; i < this.rows; i++) {
-          for (let j = 0; j < this.cols; j++) {
-            const curClass = this.getDistClass(Math.abs(x - i) + Math.abs(y - j))
-            if (curClass < sensedClass) {
-              tempArray[i][j] = 0
-            }
-            else if (curClass === sensedClass) {
-              tempArray[i][j] *= weightForEqual
-            }
-            else {
-              tempArray[i][j] *= weightForLarger
-            }
-            sum += tempArray[i][j]
-          }
-        }
-        sum /= this.ghostPositions.length
-        for (let i = 0; i < this.rows; i++) {
-          for (let j = 0; j < this.cols; j++) {
-            tempArray[i][j] /= sum
-          }
-        }
-        this.probabilities = tempArray
+        this.reWeight(x, y)
+        this.normalize()
       }
     },
     isCurrentlySensed (x, y) {

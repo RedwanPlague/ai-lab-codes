@@ -6,7 +6,7 @@
           :style="cellStyles(x, y, probability)"
           @click="senseCell(x, y)"
         >
-          <span v-if="tryResult > 0 && x === lastSensed.x && y === lastSensed.y">
+          <span v-if="tryResult > 0 && x === lastClicked.x && y === lastClicked.y">
             <span v-if="tryResult === 1" :style="{color: 'green', fontSize: (allAtOnce ? 25 : 30) + 'px'}">
               &#x2714;<span v-if="allAtOnce">{{caughtCount}}</span>
             </span>
@@ -22,6 +22,10 @@
         </td>
       </tr>
     </table>
+<!--    {{currentlySensed}}-->
+<!--    <pre v-if="history.length > 0">-->
+<!--      {{history}}-->
+<!--    </pre>-->
     <div id="caught">
 <!--      <span v-if="tryResult === 1" style="color: green">-->
 <!--        Caught {{caughtCount}} Ghost{{caughtCount > 1 ? 's' : ''}}-->
@@ -36,11 +40,12 @@
     <div id="done" v-if="ghostPositions.length === 0">
       {{ghosts === 1 ? 'Ghost' : 'All ghosts'}} caught, you can sleep at peace now. Yay!
     </div>
-    <div class="center" style="width: fit-content;">
+    <div class="center" style="width: fit-content">
       <button @click="advanceTime" v-if="ghostPositions.length > 0">Advance Time</button>
       <button @click="reveal" v-if="ghostPositions.length > 0">{{revealed ? 'Hide' : 'Reveal'}}</button>
       <button @click="catchMode" v-if="ghostPositions.length > 0">{{catching ? 'Find' : 'Catch'}}</button>
     </div>
+    <button id="undo" @click="popHistory" v-if="ghostPositions.length > 0 && history.length > 0">Undo</button>
   </div>
 </template>
 
@@ -83,10 +88,11 @@ export default {
       ghostPositions: [],
       tryResult: 0,
       caughtCount: 0,
-      lastSensed: {x: -1, y: -1},
+      lastClicked: {x: -1, y: -1},
       currentlySensed: [],
       revealed: false,
-      catching: false
+      catching: false,
+      history: []
     }
   },
   methods: {
@@ -100,18 +106,35 @@ export default {
         this.ghostPositions[i] = this.getRandomCell()
       }
       this.tryResult = 0
-      this.lastSensed = {x: -1, y: -1}
+      this.lastClicked = {x: -1, y: -1}
       this.currentlySensed = []
       // this.revealed = false
       this.catching = false
+      this.history = []
+    },
+    pushHistory () {
+      if (this.history.length >= 100) {
+        this.history.splice(0, 1)
+      }
+      this.history.push(JSON.parse(JSON.stringify({
+        probabilities: this.probabilities,
+        ghostPositions: this.ghostPositions,
+        currentlySensed: this.currentlySensed
+      })))
+    },
+    popHistory () {
+      const lastState = this.history.pop()
+      this.probabilities = lastState.probabilities
+      this.ghostPositions = lastState.ghostPositions
+      this.currentlySensed = lastState.currentlySensed
     },
     cellStyles (x, y, probability) {
-      if (this.tryResult > 0 && x === this.lastSensed.x && y === this.lastSensed.y) {
+      if (this.tryResult > 0 && x === this.lastClicked.x && y === this.lastClicked.y) {
         return {
           backgroundColor: 'white'
         }
       }
-      else if (this.isCurrentlySensed(x, y) || this.revealed) {
+      else if ((!this.catching && this.isCurrentlySensed(x, y)) || this.revealed) {
         const distClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
         return {
           backgroundColor: this.bgColors[distClass],
@@ -248,6 +271,7 @@ export default {
       }
     },
     advanceTime () {
+      this.pushHistory()
       this.currentlySensed = []
       this.advanceProbabilities()
       this.advanceGhosts()
@@ -351,7 +375,8 @@ export default {
     senseCell (x, y) {
       if (this.tryResult > 0 || this.ghostPositions.length === 0) return;
 
-      this.lastSensed = {x, y}
+      this.pushHistory()
+      this.lastClicked = {x, y}
 
       if (this.catching) {
         this.tryToCatch(x, y)
@@ -372,7 +397,7 @@ export default {
       this.revealed = !this.revealed
     },
     catchMode () {
-      this.currentlySensed = []
+      // this.currentlySensed = []
       this.catching = !this.catching
     }
   },
@@ -414,6 +439,7 @@ table td {
 #caught {
   margin-bottom: 20px;
   font-size: 20px;
+  color: black;
 }
 #done {
   margin-bottom: 20px;
@@ -433,5 +459,10 @@ button {
 }
 button:hover {
   background-color: lightgrey;
+}
+#undo {
+  position: absolute;
+  float: right;
+  width: 80px;
 }
 </style>

@@ -1,41 +1,32 @@
 <template>
   <div id="holder">
-    <table class="center">
-      <tr v-for="(row, x) in probabilities" :key="x">
-        <td v-for="(probability, y) in row" :key="y"
-          :style="cellStyles(x, y, probability)"
-          @click="senseCell(x, y)"
-        >
-          <span v-if="tryResult > 0 && x === lastClicked.x && y === lastClicked.y">
-            <span v-if="tryResult === 1" :style="{color: 'green', fontSize: (allAtOnce ? 25 : 30) + 'px'}">
-              &#x2714;<span v-if="allAtOnce">{{caughtCount}}</span>
+    <div>
+      <div id="caught">
+        <span style="float: left; position: relative; left: 100px">Caught Ghosts: {{ghosts - ghostPositions.length}}</span>
+        <span style="float: right; position: relative; right: 100px">Attempts: {{attempts}}</span>
+      </div>
+      <table class="center">
+        <tr v-for="(row, x) in probabilities" :key="x">
+          <td v-for="(probability, y) in row" :key="y"
+            :style="cellStyles(x, y, probability)"
+            @click="senseCell(x, y)"
+          >
+            <span v-if="tryResult > 0 && x === lastClicked.x && y === lastClicked.y">
+              <span v-if="tryResult === 1" :style="{color: 'green', fontSize: (allAtOnce ? 25 : 30) + 'px'}">
+                &#x2714;<span v-if="allAtOnce">{{caughtCount}}</span>
+              </span>
+              <span v-else-if="tryResult === 2" style="color: red; font-size: 30px">
+                &#x2717;
+              </span>
             </span>
-            <span v-else-if="tryResult === 2" style="color: red; font-size: 30px">
-              &#x2717;
+            <span v-else>
+  <!--            {{closestGhostDistanceFromCell(x, y)}}-->
+              {{(100*probability).toFixed(2)}}
+  <!--            {{ghostCountOfCell(x, y)}}-->
             </span>
-          </span>
-          <span v-else>
-<!--            {{closestGhostDistanceFromCell(x, y)}}-->
-            {{(100*probability).toFixed(2)}}
-<!--            {{ghostCountOfCell(x, y)}}-->
-          </span>
-        </td>
-      </tr>
-    </table>
-<!--    {{currentlySensed}}-->
-<!--    <pre v-if="history.length > 0">-->
-<!--      {{history}}-->
-<!--    </pre>-->
-    <div id="caught">
-<!--      <span v-if="tryResult === 1" style="color: green">-->
-<!--        Caught {{caughtCount}} Ghost{{caughtCount > 1 ? 's' : ''}}-->
-<!--      </span>-->
-<!--      <span v-else-if="tryResult === 2" style="color: red">-->
-<!--        No Ghost There-->
-<!--      </span>-->
-<!--      <span v-else>-->
-        Caught Ghosts: {{ghosts - ghostPositions.length}}
-<!--      </span>-->
+          </td>
+        </tr>
+      </table>
     </div>
     <div id="done" v-if="ghostPositions.length === 0">
       {{ghosts === 1 ? 'Ghost' : 'All ghosts'}} caught, you can sleep at peace now. Yay!
@@ -87,6 +78,7 @@ export default {
       probabilities: [[]],
       ghostPositions: [],
       tryResult: 0,
+      attempts: 0,
       caughtCount: 0,
       lastClicked: {x: -1, y: -1},
       currentlySensed: [],
@@ -106,6 +98,7 @@ export default {
         this.ghostPositions[i] = this.getRandomCell()
       }
       this.tryResult = 0
+      this.attempts = 0
       this.lastClicked = {x: -1, y: -1}
       this.currentlySensed = []
       // this.revealed = false
@@ -119,7 +112,8 @@ export default {
       this.history.push(JSON.parse(JSON.stringify({
         probabilities: this.probabilities,
         ghostPositions: this.ghostPositions,
-        currentlySensed: this.currentlySensed
+        currentlySensed: this.currentlySensed,
+        attempts: this.attempts
       })))
     },
     popHistory () {
@@ -127,6 +121,7 @@ export default {
       this.probabilities = lastState.probabilities
       this.ghostPositions = lastState.ghostPositions
       this.currentlySensed = lastState.currentlySensed
+      this.attempts = lastState.attempts
     },
     cellStyles (x, y, probability) {
       if (this.tryResult > 0 && x === this.lastClicked.x && y === this.lastClicked.y) {
@@ -145,7 +140,7 @@ export default {
         const depth = (this.ghostPositions.length === 0 ? 0 : Math.sqrt(probability/this.ghostPositions.length))
         return {
           backgroundColor: `rgba(100, 0, 255, ${depth})`,
-          color: depth > .5 ? 'white' : 'black'
+          color: depth > .6 ? 'white' : 'black'
         }
       }
     },
@@ -281,6 +276,7 @@ export default {
       this.$set(this.probabilities, x, this.probabilities[x])
     },
     tryToCatch (x, y) {
+      this.attempts++
       this.caughtCount = this.ghostCountOfCell(x, y)
       if (this.caughtCount > 0) {
         if (!this.allAtOnce) {
@@ -427,8 +423,11 @@ export default {
 }
 table {
   border: 1px solid black;
-  margin-top: 20px;
-  margin-bottom: 20px;
+  position: relative;
+  top: 15px;
+  /*margin-top: 20px;*/
+  margin-bottom: 35px;
+  clear: both;
 }
 table td {
   width: 50px;
@@ -437,7 +436,7 @@ table td {
   cursor: pointer;
 }
 #caught {
-  margin-bottom: 20px;
+  margin-top: 20px;
   font-size: 20px;
   color: black;
 }

@@ -65,6 +65,10 @@ export default {
       default () {
         return [2, 7]
       }
+    },
+    allAtOnce: {
+        type: Boolean,
+        default: true
     }
   },
   data () {
@@ -78,7 +82,6 @@ export default {
       probabilities: [[]],
       ghostPositions: [],
       tryResult: 0,
-      allAtOnce: false,
       caughtCount: 0,
       lastSensed: {x: -1, y: -1},
       currentlySensed: [],
@@ -118,7 +121,7 @@ export default {
       else {
         const depth = (this.ghostPositions.length === 0 ? 0 : Math.sqrt(probability/this.ghostPositions.length))
         return {
-          backgroundColor: `rgba(0, 0, 255, ${depth})`,
+          backgroundColor: `rgba(100, 0, 255, ${depth})`,
           color: depth > .5 ? 'white' : 'black'
         }
       }
@@ -256,7 +259,7 @@ export default {
     tryToCatch (x, y) {
       this.caughtCount = this.ghostCountOfCell(x, y)
       if (this.caughtCount > 0) {
-        if (this.allAtOnce) {
+        if (!this.allAtOnce) {
           this.caughtCount = 1
         }
 

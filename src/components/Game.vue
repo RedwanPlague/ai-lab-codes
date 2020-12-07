@@ -15,12 +15,24 @@
     <label>far:
       <input v-model="far.string" name="far" type="number" @input="handleInputChange(far)" :min="far.min" :max="far.max"/>
     </label>
-    <Board :rows="rows.value" :cols="cols.value" :ghosts="ghosts.value" :splits="[near.value, near.value + far.value]"/>
+    <label>catch:
+      <select v-model="allAtOnce" style="font-family: monospace">
+        <option :value="true">all ghosts in a cell at once</option>
+        <option :value="false">one ghost at a time</option>
+      </select>
+    </label>
+    <Board
+      :rows="rows.value"
+      :cols="cols.value"
+      :ghosts="ghosts.value"
+      :splits="[near.value, near.value + far.value]"
+      :all-at-once="allAtOnce"
+    />
   </div>
 </template>
 
 <script>
-import Board from "@/components/Board";
+import Board from "./Board";
 
 export default {
   name: "Game",
@@ -59,6 +71,7 @@ export default {
         min: 0,
         max: 5
       },
+      allAtOnce: true
     }
   },
   methods: {
@@ -79,5 +92,9 @@ export default {
 <style scoped>
 label {
   margin: 10px;
+}
+select {
+  font-size: 14px;
+  width: 50px;
 }
 </style>

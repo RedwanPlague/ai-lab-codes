@@ -64,17 +64,56 @@ export default {
     },
     allAtOnce: {
         type: Boolean,
-        default: true
+        default: false
+    },
+    sensorAccuracies: {
+      type: Array,
+      default () {
+          return [];
+      }
+    },
+    uniform: {
+      type: Boolean,
+      default: true
+    },
+    moveUniform: {
+      type: Object,
+      default () {
+        return {}
+      }
+    },
+    move: {
+      type: Object,
+      default () {
+        return {}
+      }
     }
   },
   data () {
     return {
       bgColors: ['red', 'orange', 'green'],
       fontColors: ['white', 'black', 'white'],
-      // side, diagonal, stay
-      cornerProbabilities: [0.48, 0.018, 0.004],
-      sideProbabilities: [0.32, 0.012, 0.004],
-      midProbabilities: [0.24, 0.009, 0.004],
+      // U, D, R, L, UR, UL, DR, DL, S
+      // moveUniform : {
+      //   cornerProbabilities: [0.48, 0.48, 0.48, 0.48, 0.036, 0.036, 0.036, 0.036, 0.004],
+      //   sideProbabilities: [0.32, 0.32, 0.32, 0.32, 0.018, 0.018, 0.018, 0.018, 0.004],
+      //   midProbabilities: [0.24, 0.24, 0.24, 0.24, 0.009, 0.009, 0.009, 0.009, 0.004]
+      // },
+      // move: {
+      //   cornerUR: [0.00, 0.00, 0.00, 0.96, 0.036, 0.036, 0.036, 0.036, 0.004],
+      //   cornerUL: [0.00, 0.00, 0.00, 0.00, 0.036, 0.036, 0.036, 0.036, 0.964],
+      //   cornerDR: [0.00, 0.00, 0.00, 0.96, 0.036, 0.036, 0.036, 0.036, 0.004],
+      //   cornerDL: [0.00, 0.00, 0.00, 0.00, 0.036, 0.036, 0.036, 0.036, 0.964],
+      //   sideU: [0.00, 0.00, 0.00, 0.96, 0.018, 0.018, 0.018, 0.018, 0.004],
+      //   sideD: [0.00, 0.00, 0.00, 0.96, 0.018, 0.018, 0.018, 0.018, 0.004],
+      //   sideL: [0.00, 0.00, 0.00, 0.00, 0.018, 0.018, 0.018, 0.018, 0.964],
+      //   sideR: [0.00, 0.00, 0.00, 0.96, 0.018, 0.018, 0.018, 0.018, 0.004],
+      //   mid: [0.00, 0.00, 0.00, 0.96, 0.009, 0.009, 0.009, 0.009, 0.004]
+      // },
+      // U, D, R, L, UR, UL, DR, DL, S
+      dx: [-1, +1,  0,  0, +1, +1, -1, -1,  0],
+      dy: [ 0,  0, +1, -1, +1, -1, +1, -1,  0],
+      // states
       probabilities: [[]],
       ghostPositions: [],
       tryResult: 0,
@@ -129,7 +168,14 @@ export default {
           backgroundColor: 'white'
         }
       }
-      else if ((!this.catching && this.isCurrentlySensed(x, y)) || this.revealed) {
+      else if (!this.catching && this.isCurrentlySensed(x, y)) {
+        const distClass = this.currentlySensed.find(data => x === data.x && y === data.y).distClass
+        return {
+          backgroundColor: this.bgColors[distClass],
+          color: this.fontColors[distClass]
+        }
+      }
+      else if (this.revealed) {
         const distClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
         return {
           backgroundColor: this.bgColors[distClass],
@@ -189,29 +235,53 @@ export default {
       return !this.isCornerCell(x, y) && !this.isMidCell(x, y)
     },
     getMoveProbabilities (x, y) {
-      if (this.isCornerCell(x, y)) {
-        return this.cornerProbabilities
+      if (this.uniform) {
+        if (this.isCornerCell(x, y)) {
+          return this.moveUniform.cornerProbabilities
+        } else if (this.isSideCell(x, y)) {
+          return this.moveUniform.sideProbabilities
+        }
+        return this.moveUniform.midProbabilities
       }
-      else if (this.isSideCell(x, y)) {
-        return this.sideProbabilities
-      }
-      return this.midProbabilities
-    },
-    updateArray (tempArray, x, y, value) {
-      if (this.withinBoard(x, y)) {
-        tempArray[x][y] += value
+      else {
+        if (x === 0 && y === 0) {
+          return this.move.cornerUL
+        }
+        if (x === 0 && y === this.cols-1) {
+          return this.move.cornerUR
+        }
+        if (x === this.rows-1 && y === 0) {
+          return this.move.cornerDL
+        }
+        if (x === this.rows-1 && y === this.cols-1) {
+          return this.move.cornerDR
+        }
+        if (x === 0) {
+          return this.move.sideU;
+        }
+        if (x === this.rows-1) {
+          return this.move.sideD;
+        }
+        if (y === 0) {
+          return this.move.sideL;
+        }
+        if (y === this.cols-1) {
+          return this.move.sideR;
+        }
+        return this.move.mid
       }
     },
     spreadSelf (tempArray, x, y, value, moveProbabilities) {
-      this.updateArray(tempArray, x+1, y, value * moveProbabilities[0])
-      this.updateArray(tempArray, x-1, y, value * moveProbabilities[0])
-      this.updateArray(tempArray, x, y+1, value * moveProbabilities[0])
-      this.updateArray(tempArray, x, y-1, value * moveProbabilities[0])
-      this.updateArray(tempArray, x+1, y+1, value * moveProbabilities[1])
-      this.updateArray(tempArray, x+1, y-1, value * moveProbabilities[1])
-      this.updateArray(tempArray, x-1, y+1, value * moveProbabilities[1])
-      this.updateArray(tempArray, x-1, y-1, value * moveProbabilities[1])
-      this.updateArray(tempArray, x, y, value * moveProbabilities[2])
+      let sum = 0
+      for (let i = 0; i < this.dx.length; i++) {
+        const nx = x + this.dx[i]
+        const ny = y + this.dy[i]
+        if (this.withinBoard(nx, ny)) {
+          tempArray[nx][ny] += value * moveProbabilities[i]
+          sum += moveProbabilities[i]
+        }
+      }
+      tempArray[x][y] += value * Math.max(0, 1 - sum)
     },
     advanceProbabilities () {
       const tempProbabilities = Array(this.rows).fill(0).map(x => Array(this.cols).fill(x))
@@ -226,39 +296,25 @@ export default {
       const moveProbabilities = this.getMoveProbabilities(x, y)
       const random = Math.random()
       let current = 0
-      if (this.withinBoard(x+1, y)) {
-        current += moveProbabilities[0]
-        if (random < current) return {x:x+1, y:y}
-      }
-      if (this.withinBoard(x-1, y)) {
-        current += moveProbabilities[0]
-        if (random < current) return {x:x-1, y:y}
-      }
-      if (this.withinBoard(x, y+1)) {
-        current += moveProbabilities[0]
-        if (random < current) return {x:x, y:y+1}
-      }
-      if (this.withinBoard(x, y-1)) {
-        current += moveProbabilities[0]
-        if (random < current) return {x:x, y:y-1}
-      }
-      if (this.withinBoard(x+1, y+1)) {
-        current += moveProbabilities[1]
-        if (random < current) return {x:x+1, y:y+1}
-      }
-      if (this.withinBoard(x+1, y-1)) {
-        current += moveProbabilities[1]
-        if (random < current) return {x:x+1, y:y-1}
-      }
-      if (this.withinBoard(x-1, y+1)) {
-        current += moveProbabilities[1]
-        if (random < current) return {x:x-1, y:y+1}
-      }
-      if (this.withinBoard(x-1, y-1)) {
-        current += moveProbabilities[1]
-        if (random < current) return {x:x-1, y:y-1}
+      for (let i = 0; i < this.dx.length; i++) {
+        if (this.withinBoard(x+this.dx[i], y+this.dy[i])) {
+          current += moveProbabilities[i]
+          if (random < current) return {x: x+this.dx[i], y: y+this.dy[i]}
+        }
       }
       return {x, y}
+    },
+    verifySum () {
+      let sum = 0
+      for (let i = 0; i < this.rows; i++) {
+        for (let j = 0; j < this.cols; j++) {
+          sum += this.probabilities[i][j]
+        }
+      }
+      if (Math.abs(sum - this.ghostPositions.length) > 0.0001) {
+        alert("Stop using incorrect probabilities :3")
+        this.initialize()
+      }
     },
     advanceGhosts () {
       for (let i = 0; i < this.ghostPositions.length; i++) {
@@ -269,6 +325,7 @@ export default {
       this.pushHistory()
       this.currentlySensed = []
       this.advanceProbabilities()
+      this.verifySum()
       this.advanceGhosts()
     },
     updateCell (x, y, value) {
@@ -307,7 +364,7 @@ export default {
         this.tryResult = 1
         setTimeout(() => {
           this.tryResult = 0
-        }, 1000)
+        }, this.allAtOnce ? 500 : 200)
       }
       else {
         this.updateCell(x, y, 0)
@@ -315,43 +372,42 @@ export default {
         this.tryResult = 2
         setTimeout(() => {
           this.tryResult = 0
-        }, 500)
+        }, 200)
       }
     },
-    reWeight (x, y) {
-      const sensedClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
-
-      // number of cells that have distClass < sensedClass
-      let A = 0
-      for (let i = 0; i < sensedClass; i++) {
-        A += this.getDistClassCount(x, y, i)
+    reWeight (x, y, sensedClass) {
+      const A = Array(this.bgColors.length)
+      for (let i = 0; i < A.length; i++) {
+        A[i] = this.getDistClassCount(x, y, i)
       }
-      // number of cells that have distClass === sensedClass
-      const B = this.getDistClassCount(x, y, sensedClass)
 
       const N = this.rows * this.cols
       const useN = Math.pow(N, this.ghostPositions.length)
       const useN1 = Math.pow(N - 1, this.ghostPositions.length)
-      const useNA = Math.pow(N - A, this.ghostPositions.length)
-      const useNA1 = Math.pow(N - A - 1, this.ghostPositions.length)
-      const useNAB = Math.pow(N - A - B, this.ghostPositions.length)
-      const useNAB1 = Math.pow(N - A - B - 1, this.ghostPositions.length)
-      const weightForEqual = (useNA - useNA1) / (useN - useN1)
-      const weightForLarger = (useNA - useNA1 - useNAB + useNAB1) / (useN - useN1)
+      const hor = useN - useN1
+
+      const whenSmaller = Array(A.length)
+      const whenEqual = Array(A.length)
+      let sumA = 0
+      for (let i = 0; i < A.length; i++) {
+        const useNA = Math.pow(N - sumA, this.ghostPositions.length)
+        const useNA1 = Math.pow(N - sumA - 1, this.ghostPositions.length)
+        whenEqual[i] = (useNA - useNA1) / hor
+        sumA += A[i]
+        const useNAB = Math.pow(N - sumA, this.ghostPositions.length)
+        const useNAB1 = Math.pow(N - sumA - 1, this.ghostPositions.length)
+        whenSmaller[i] = (useNA - useNA1 - useNAB + useNAB1) / hor
+      }
 
       const tempArray = JSON.parse(JSON.stringify(this.probabilities))
       for (let i = 0; i < this.rows; i++) {
         for (let j = 0; j < this.cols; j++) {
           const curClass = this.getDistClass(Math.abs(x - i) + Math.abs(y - j))
-          if (curClass < sensedClass) {
-            tempArray[i][j] = 0
+          let weight = whenEqual[curClass] * this.sensorAccuracies[curClass][sensedClass]
+          for (let k = 0; k < curClass; k++) {
+            weight += whenSmaller[k] * this.sensorAccuracies[k][sensedClass]
           }
-          else if (curClass === sensedClass) {
-            tempArray[i][j] *= weightForEqual
-          }
-          else {
-            tempArray[i][j] *= weightForLarger
-          }
+          tempArray[i][j] *= weight
         }
       }
       this.probabilities = tempArray
@@ -368,6 +424,17 @@ export default {
       }
       this.probabilities = tempArray
     },
+    sense (x, y) {
+      const distClass = this.getDistClass(this.closestGhostDistanceFromCell(x, y))
+      const random = Math.random()
+      let cur = 0
+      const errorChances = this.sensorAccuracies[distClass]
+      for (let i = 0; i < errorChances.length; i++) {
+        cur += errorChances[i]
+        if (random < cur) return i
+      }
+      return errorChances[errorChances.length-1]
+    },
     senseCell (x, y) {
       if (this.tryResult > 0 || this.ghostPositions.length === 0) return;
 
@@ -378,8 +445,9 @@ export default {
         this.tryToCatch(x, y)
       }
       else if (!this.isCurrentlySensed(x, y)) {
-        this.currentlySensed.push({x, y})
-        this.reWeight(x, y)
+        const distClass = this.sense(x, y)
+        this.currentlySensed.push({x, y, distClass})
+        this.reWeight(x, y, distClass)
         this.normalize()
       }
     },
@@ -395,7 +463,7 @@ export default {
     catchMode () {
       // this.currentlySensed = []
       this.catching = !this.catching
-    }
+    },
   },
   watch: {
     rows () {

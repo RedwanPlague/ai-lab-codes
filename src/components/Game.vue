@@ -21,12 +21,74 @@
         <option :value="false">one ghost at a time</option>
       </select>
     </label>
-    <Board
+    <button id="edit" @click="editToggle">{{editing ? 'Play' : 'Edit'}}</button>
+    <div id="data" v-show="editing">
+      <table class="center" style="margin-top: 50px">
+        <caption>Sensor Probabilities</caption>
+        <tr>
+          <td v-for="(color, i) in colors" :key="i">
+            {{color}}
+          </td>
+        </tr>
+        <tr v-for="i in 3" :key="i">
+          <td :style="{
+            color: (sumOk(sensorAccuracies[i-1]) ? 'black' : 'red'),
+            textAlign: 'left'
+          }">
+            {{colors[i]}}
+          </td>
+          <td v-for="j in 3" :key="j">
+            <label>
+              <input
+                  v-model="sensorAccuracies[i-1][j-1]"
+                  type="number"
+                  step="0.01"
+                  :min="0"
+                  :max="1"
+                  @blur="changeValue(sensorAccuracies, i-1, j-1)"
+              />
+            </label>
+          </td>
+        </tr>
+      </table>
+      <button id="uniform" @click="uniformToggle">
+        {{uniform ? 'Flexible' : 'Uniform'}}
+      </button>
+      <table class="center">
+        <caption>Transition Probabilities</caption>
+        <tr>
+          <td></td>
+          <td v-for="(direction, i) in directions" :key="i">
+            {{direction}}
+          </td>
+        </tr>
+        <tr v-for="(value, key, i) in useMove" :key="i">
+          <td style="text-align: left">{{key}}</td>
+          <td v-for="(p, j) in value" :key="j">
+            <label>
+              <input
+                  v-model="useMove[key][j]"
+                  type="number"
+                  step="0.01"
+                  :min="0"
+                  :max="1"
+                  @blur="changeValue(useMove, key, j)"
+              />
+            </label>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <Board v-show="!editing"
       :rows="rows.value"
       :cols="cols.value"
       :ghosts="ghosts.value"
       :splits="[near.value, near.value + far.value]"
       :all-at-once="allAtOnce"
+      :sensor-accuracies="sensorAccuracies"
+      :uniform="uniform"
+      :move-uniform="moveUniform"
+      :move="move"
     />
   </div>
 </template>
@@ -71,7 +133,35 @@ export default {
         min: 0,
         max: 5
       },
-      allAtOnce: true
+      allAtOnce: false,
+      editing: false,
+      // sensor
+      colors: ['', 'red', 'orange', 'green'],
+      sensorAccuracies: [
+        // red, orange, green
+        [1.00, 0.00, 0.00], // red
+        [0.00, 1.00, 0.00], // orange
+        [0.00, 0.00, 1.00]  // green
+      ],
+      uniform: true,
+      directions: ['U', 'D', 'R', 'L', 'UR', 'UL', 'DR', 'DL', 'S'],
+      moveUniform : {
+        cornerProbabilities: [0.48, 0.48, 0.48, 0.48, 0.036, 0.036, 0.036, 0.036, 0.004],
+        sideProbabilities: [0.32, 0.32, 0.32, 0.32, 0.018, 0.018, 0.018, 0.018, 0.004],
+        midProbabilities: [0.24, 0.24, 0.24, 0.24, 0.009, 0.009, 0.009, 0.009, 0.004]
+      },
+      move: {
+        cornerUR: [0.00, 0.00, 0.00, 0.96, 0.036, 0.036, 0.036, 0.036, 0.004],
+        cornerUL: [0.00, 0.00, 0.00, 0.00, 0.036, 0.036, 0.036, 0.036, 0.964],
+        cornerDR: [0.00, 0.00, 0.00, 0.96, 0.036, 0.036, 0.036, 0.036, 0.004],
+        cornerDL: [0.00, 0.00, 0.00, 0.00, 0.036, 0.036, 0.036, 0.036, 0.964],
+        sideU: [0.00, 0.00, 0.00, 0.96, 0.018, 0.018, 0.018, 0.018, 0.004],
+        sideD: [0.00, 0.00, 0.00, 0.96, 0.018, 0.018, 0.018, 0.018, 0.004],
+        sideL: [0.00, 0.00, 0.00, 0.00, 0.018, 0.018, 0.018, 0.018, 0.964],
+        sideR: [0.00, 0.00, 0.00, 0.96, 0.018, 0.018, 0.018, 0.018, 0.004],
+        mid: [0.00, 0.00, 0.00, 0.96, 0.009, 0.009, 0.009, 0.009, 0.004]
+      },
+      useMove: {}
     }
   },
   methods: {
@@ -85,6 +175,28 @@ export default {
         this.$set(input, 'string', value.toString())
       }
     },
+    editToggle () {
+      this.editing = ! this.editing;
+    },
+    changeValue (who, i, j) {
+      who[i][j] = Math.max(0, Math.min(1, parseFloat('0' + who[i][j])))
+      this.$set(who, i, who[i])
+      this.$forceUpdate()
+    },
+    uniformToggle () {
+      this.uniform = ! this.uniform
+      this.useMove = this.uniform ? this.moveUniform : this.move
+    },
+    sumOk (array) {
+      let sum = 0
+      for (const value of array) {
+        sum += value
+      }
+      return Math.abs(sum - 1) < 0.00001
+    }
+  },
+  created () {
+    this.useMove = this.moveUniform
   }
 }
 </script>
@@ -96,5 +208,36 @@ label {
 select {
   font-size: 14px;
   width: 50px;
+}
+#edit {
+  font-size: 14px;
+  margin-left: 20px;
+  width: 45px;
+  cursor: pointer;
+}
+#data > label > input {
+  width: 55px;
+}
+table {
+  border: 1px solid black;
+  padding-left: 10px;
+}
+table > caption {
+  margin-bottom: 5px;
+}
+td {
+  width: 60px;
+  height: 30px;
+}
+input {
+  width: 55px;
+}
+#uniform {
+  font-size: 14px;
+  width: 70px;
+  height: 30px;
+  margin-top: 50px;
+  margin-bottom: 20px;
+  cursor: pointer;
 }
 </style>
